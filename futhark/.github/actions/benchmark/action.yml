@@ -1,0 +1,46 @@
+name: 'Benchmark'
+description: 'Run benchmark suite'
+inputs:
+  backend:
+    description: 'Backend to use'
+    required: true
+  system:
+    description: 'Name of system (e.g. GPU name)'
+    required: true
+  futhark-options:
+    description: 'Options to pass to futhark bench'
+    required: false
+    default: ''
+  slurm-options:
+    description: 'Options to pass to srun'
+    required: false
+    default: ''
+runs:
+  using: "composite"
+  steps:
+    - name: Download Benchmarks.
+      uses: ./.github/actions/futhark-slurm
+      with:
+        script: |
+          module load perl
+          cd futhark-benchmarks
+          ./get-data.sh external-data.txt
+        slurm-options: --time=30:00
+
+    - uses: ./.github/actions/futhark-slurm
+      with:
+        script: |
+          hostname
+          module unload cuda
+          module load cuda/11.8
+          futhark bench futhark-benchmarks \
+            --backend ${{inputs.backend}} \
+            --exclude no_${{inputs.system}} \
+            --json futhark-${{inputs.backend}}-${{inputs.system}}-$GITHUB_SHA.json \
+            --ignore-files /lib/ ${{inputs.futhark-options}}
+        slurm-options: --time=0-02:00:00 ${{inputs.slurm-options}}
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: futhark-${{inputs.backend}}-${{inputs.system}}-${{ github.sha }}.json
+        path: futhark-${{inputs.backend}}-${{inputs.system}}-${{ github.sha }}.json
